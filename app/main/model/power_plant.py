@@ -1,3 +1,4 @@
+import operator
 from abc import ABC, abstractmethod
 from app.main.utils.general_utils import PowerPlantTypeEnum
 
@@ -21,15 +22,17 @@ class PowerPlantFactory:
 
     @staticmethod
     def set_fuel_on_power_plant(powerplant_instance, fuels):
-        if powerplant_instance == GasFired:
+        if type(powerplant_instance) == GasFired:
             powerplant_instance.fuel_rate = fuels.get("gas(euro/MWh)")
             powerplant_instance.co2_emission = fuels.get("co2(euro/ton)")
-        elif powerplant_instance == TurboJet:
+        elif type(powerplant_instance) == TurboJet:
             powerplant_instance.fuel_rate = fuels.get("kerosine(euro/MWh)")
             # Problem statement says only the gas-fired emits CO2...
             # powerplant_instance.co2_emission = fuels.get("co2(euro/ton)")
-        elif powerplant_instance == WindTurbine:
+        elif type(powerplant_instance) == WindTurbine:
             powerplant_instance.wind_percentage = fuels.get("wind(%)")
+        else:
+            ValueError("Unknown powerplant to set fuel on")
 
 
 class PowerPlant(ABC):
@@ -40,6 +43,9 @@ class PowerPlant(ABC):
         self.pmax = pmax
         self.fuel_rate = 0
         self.co2_emission = 0
+
+    def __lt__(self, other):
+        return self.cost_per_mwh() < other.cost_per_mwh()
 
     @abstractmethod
     def cost_euros_per_load(self, load_on_powerplant):
@@ -58,9 +64,6 @@ class PowerPlant(ABC):
         co2_cost = 0.3 * self.co2_emission
         return fuel_cost + co2_cost
 
-    @staticmethod
-    def sort_power_plants_by_cost_per_mwh(power_plants):
-        return sorted(power_plants, key=lambda p: p.cost_per_mwh)
 
 class GasFired(PowerPlant):
     def max_power_when_on(self):

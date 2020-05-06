@@ -27,7 +27,7 @@ api.add_namespace(powerplant_namespace)
 app.register_blueprint(blueprint)
 
 app.app_context().push()
-app.run(debug=True)
+app.run(host="0.0.0.0", port=5001, debug=True)
 
 
 @app.errorhandler(422)
