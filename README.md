@@ -15,7 +15,7 @@ The application responds to POST requests
 curl -H "Content-Type: application/json" --data @payload1.json http://0.0.0.0:5001/powerplant/
 ```
 
-##Algorithm of load distribution
+## Algorithm of load distribution
 
 1. The power plants are sorted in an ascending order based on the cost in euros per MWh of electricity generated.
 2. The load is first distributed on the power plants with the lowest cost of operation. While setting the load 
@@ -26,14 +26,14 @@ on each plant, it is checked:
 - Is the remaining-load less than Pmax and also less than Pmin, check if it is worth reducing load on a 
 cheaper plan to get the load on the current plant to Pmin 
 
-##Features
+## Features
 1. Type/field validation is done on the POST request
 2. CO2 is accounted for on the gas turbine power plant
 3. Contains basic test cases in test.py
 
-##Limitations
+## Limitations
 1. Currently it only accepts the unites in MWh, euros, ton of CO2
 2. It runs on debug mode
 
-##Author
+## Author
 [Vikramaditya Gaonkar](https://github.com/vikramaditya91)
