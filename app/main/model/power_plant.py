@@ -1,10 +1,11 @@
-import operator
 from abc import ABC, abstractmethod
-from app.main.utils.general_utils import PowerPlantTypeEnum
+
 
 class PowerPlantFactory:
+    """Responsible for instantiating the power plants and feeding them information about fuels"""
     @staticmethod
     def get_power_plant_type(pptype):
+        """determines type of PowerPlant instance based on string"""
         if pptype == "gasfired":
             return GasFired
         elif pptype == "turbojet":
@@ -16,12 +17,14 @@ class PowerPlantFactory:
 
     @staticmethod
     def get_power_plant_instance(powerplant_raw):
+        """Factory for generating the power plant instances"""
         pptype = PowerPlantFactory.get_power_plant_type(powerplant_raw.get("type"))
         return pptype(powerplant_raw.get("name"), powerplant_raw.get("efficiency"),
                       powerplant_raw.get("pmin"), powerplant_raw.get("pmax"))
 
     @staticmethod
     def set_fuel_on_power_plant(powerplant_instance, fuels):
+        """Sets the fuel on the power plant instances"""
         if type(powerplant_instance) == GasFired:
             powerplant_instance.fuel_rate = fuels.get("gas(euro/MWh)")
             powerplant_instance.co2_emission = fuels.get("co2(euro/ton)")
@@ -36,6 +39,7 @@ class PowerPlantFactory:
 
 
 class PowerPlant(ABC):
+    """PowerPlant Base Class"""
     def __init__(self, name, efficiency, pmin, pmax):
         self.name = name
         self.efficiency = efficiency
@@ -45,24 +49,35 @@ class PowerPlant(ABC):
         self.co2_emission = 0
 
     def __lt__(self, other):
+        """Compare powerplants by the running cost per mwh"""
         return self.cost_per_mwh() < other.cost_per_mwh()
 
     @abstractmethod
     def cost_euros_per_load(self, load_on_powerplant):
+        """Cost in euros per load of power plant"""
         pass
 
     @abstractmethod
     def min_power_when_on(self):
+        """Minimum power that has to be delivered by the power plant when on"""
         pass
 
     @abstractmethod
     def max_power_when_on(self):
+        """Max power that can be delivered by the powerplant when on"""
         pass
 
     def cost_per_mwh(self):
+        """Cost per mwh of electricity"""
         fuel_cost = self.fuel_rate/self.efficiency
         co2_cost = 0.3 * self.co2_emission
         return fuel_cost + co2_cost
+
+    @staticmethod
+    def get_sorted_power_plants(power_plants):
+        """Sort the power plants. It sorts them based on the cost_per_mwh"""
+        power_plants.sort()
+        return power_plants
 
 
 class GasFired(PowerPlant):

@@ -3,13 +3,10 @@ import logging
 from flask import request, jsonify
 from app.main import create_app
 from app.main.utils.general_utils import init_logger
-
-# app/__init__.py
 import werkzeug
 werkzeug.cached_property = werkzeug.utils.cached_property
 from flask_restplus import Api
 from flask import Blueprint
-
 from app.main.controller.production_plan_controller import PowerPlantResource, powerplant_namespace
 
 init_logger(level=logging.DEBUG)
@@ -27,19 +24,4 @@ api.add_namespace(powerplant_namespace)
 app.register_blueprint(blueprint)
 
 app.app_context().push()
-app.run(host="0.0.0.0", port=5001, debug=True)
-
-
-@app.errorhandler(422)
-def handle_unprocessable_entity(err):
-    # webargs attaches additional metadata to the `data` attribute
-    data = getattr(err, 'data')
-    print(err)
-    if data:
-        # Get validations from the ValidationError object
-        messages = data['exc'].messages
-    else:
-        messages = ['Invalid request']
-    return jsonify({
-        'messages': messages,
-    }), 422
+app.run(host="127.0.0.1", port=5000, debug=True)

@@ -1,22 +1,24 @@
-import numpy
 import logging
 from app.main.model.power_plant import PowerPlantFactory, PowerPlant
-
+from app.main.utils.general_utils import PowerPlantConfigurationError
 logger = logging.getLogger(__name__)
 
 
 def load_distributor(raw_input_data):
-    load_calculations = LoadCalculations.get_load_calculator_from_raw_data(raw_input_data)
-    distributed_load = load_calculations.distribute_load()
-    return distributed_load
+    """
+    Obtains the raw_input_data, transfers it and gets the output in desired form
+    :param raw_input_data: dictionary of load, fuels and powerplants
+    :return:list of powerplants with the name and load on each of them
+    """
+    load_calculations_interface = LoadCalculationInterface.get_load_calculator_from_raw_data(raw_input_data)
+    distributed_load = load_calculations_interface.distribute_load()
+    sanitized_response = load_calculations_interface.convert_distributed_data_as_response(
+        distributed_load, load_calculations_interface.power_plants)
+    return sanitized_response
 
 
-class LoadCalculations:
-    def __init__(self, load_to_distribute, fuel_list, power_plants):
-        self.load_to_distrib = load_to_distribute
-        self.fuel_list = fuel_list
-        self.power_plants = power_plants
-
+class LoadCalculationInterface:
+    """Interface to the Flask App for consolidating information from the POST and sending valid data back"""
     @classmethod
     def get_load_calculator_from_raw_data(cls, raw_input_data):
         load_to_distribute = raw_input_data.get("load", 0)
@@ -26,6 +28,11 @@ class LoadCalculations:
         [PowerPlantFactory.set_fuel_on_power_plant(powerplant_instance, fuels) for powerplant_instance in
          power_plant_instances]
         return cls(load_to_distribute, fuels, power_plant_instances)
+
+    def __init__(self, load_to_distribute, fuel_list, power_plants):
+        self.load_to_distrib = load_to_distribute
+        self.fuel_list = fuel_list
+        self.power_plants = power_plants
 
     @property
     def load_to_distrib(self):
@@ -38,59 +45,113 @@ class LoadCalculations:
         self._load_to_distrib = int(load_to_distrib)
 
     def distribute_load(self):
-        self.power_plants.sort()
-        power_plants_sorted = self.power_plants
-        load_array = [{} for item in range(self.load_to_distrib)]
-        for load_index in range(self.load_to_distrib):
-            remaining_load_to_distribute = load_index
-            for powerplant_index, power_plant in enumerate(power_plants_sorted):
-                if remaining_load_to_distribute > 1e-2:
-                    if load_index < power_plant.min_power_when_on():
-                        # Can not turn on a power plant midway
-                        continue
-                    if (remaining_load_to_distribute >= power_plant.pmax) and \
-                            (
-                                    power_plant.max_power_when_on() >= remaining_load_to_distribute >= power_plant.min_power_when_on()):
-                        # This power plant is not sufficient to satisfy the load
-                        load_array[load_index][power_plant] = power_plant.pmax
-                        remaining_load_to_distribute = remaining_load_to_distribute - power_plant.pmax
-                    elif (remaining_load_to_distribute < power_plant.pmax) and \
-                            (power_plant.max_power_when_on() >= remaining_load_to_distribute >= power_plant.min_power_when_on()):
-                        # This power plant is just sufficient to satisfy the load. And it requires more than pmin
-                        load_array[load_index][power_plant] = remaining_load_to_distribute
-                        remaining_load_to_distribute = 0
+        """
+        Sends the load and power plants to the PowerPlantCore to get the most inexpensive configuration of PowerPlants
+        :return:
+        """
+        power_plants_sorted = PowerPlant.get_sorted_power_plants(self.power_plants)
+        load_calculator = LoadCalculatorCore()
+        return load_calculator.get_optimal_power_plants_for_load(self.load_to_distrib, power_plants_sorted)
+
+    @staticmethod
+    def convert_distributed_data_as_response(distributed_load_dict, power_plants):
+        """Converts the available information of optimal powerplants to the response expected i.e list of dicts"""
+        response = []
+        for power_plant in power_plants:
+            load_on_power_plant = distributed_load_dict.get(power_plant, 0)
+            response.append({"name": power_plant.name,
+                             "p": load_on_power_plant})
+        return response
+
+
+class LoadCalculatorCore:
+    """All functions related to calculating the load. No unit conversion handled here"""
+    def get_optimal_power_plants_for_load(self, load, sorted_power_plants):
+        """
+        NOTE: Unit conversion is not handled here
+        Obtains a dict (key=powerplant, value=load on it) based on the load provided and a list of sorted power plants
+        which is going to cost the least in euros
+        It uses a sorted list of power plants by cost/mwh and fills up the load in that order
+        The algorithm is:
+        a) Is the total-load less than pmin of the powerplant? skip it
+        b) Is the remaining-load more than the pmax, fill the powerplants's load with pmax
+        c) Is the remaining-load less than pmax, but more than pmin, fill the powerplant's load by remaining-load
+        d) Is the remaining-load less than pmax and also less than pmin, take the special algorithm in determine_cheapest_config_at_transition
+        :param load: int, load required to be distributed among power plants available on the grid
+        :param sorted_power_plants: list of sorted power plant instances
+        :return: dict of powerplants which are the most optimal (least cost in euros)
+        """
+        remaining_load_to_distrib = load
+        power_plants_to_use = {}
+        sorted_power_plants_copy = sorted_power_plants
+        for powerplant_current_index, current_power_plant in enumerate(sorted_power_plants_copy):
+            if remaining_load_to_distrib > 0:
+                if (load < current_power_plant.min_power_when_on()) or (current_power_plant in power_plants_to_use.keys()):
+                    # Power plant can not be turned on as load is greater than min power
+                    continue
+                if (remaining_load_to_distrib >= current_power_plant.min_power_when_on()) and (remaining_load_to_distrib>=current_power_plant.max_power_when_on()):
+                    # This power plant is going to be used normally sufficient to satisfy the load
+                    power_plants_to_use[current_power_plant] = current_power_plant.max_power_when_on()
+                    remaining_load_to_distrib = remaining_load_to_distrib - current_power_plant.max_power_when_on()
+                elif (remaining_load_to_distrib >= current_power_plant.min_power_when_on()) and (remaining_load_to_distrib<current_power_plant.max_power_when_on()):
+                    # This power plant is just sufficient to satisfy the load. And it requires more than pmin
+                    power_plants_to_use[current_power_plant] = remaining_load_to_distrib
+                    remaining_load_to_distrib = 0
+                elif remaining_load_to_distrib <= current_power_plant.min_power_when_on():
+                    # Does it make sense to turn this on, but shutting down low cost power plants?
+                    power_plants_to_use = self.determine_cheapest_config_at_transition(power_plants_to_use,
+                                                                                       powerplant_current_index,
+                                                                                       sorted_power_plants_copy,
+                                                                                       remaining_load_to_distrib,
+                                                                                       load)
+
+                    remaining_load_to_distrib = load - sum(power_plants_to_use.values())
+        if remaining_load_to_distrib>1e-2:
+            logging.debug(f"Impossible to have a configuration with load {load}")
+            raise PowerPlantConfigurationError(f"Impossible to have a configuration with a load of {load}")
+        return power_plants_to_use
+
+    def determine_cheapest_config_at_transition(self, power_plants_already_calc, powerplant_index_check_from,
+                                                sorted_power_plants, remaining_load_to_distrib, max_load):
+        """
+        Handles situations when the reminaing load to distribute is less than the pmin of a power-plant.
+        A combination of functional-programming approach/fractional knapsack-without-repetition is followed here.
+        Against each power-plant, it is checked what the value would be the total cost if the load were
+        total-cost = cost(total load - pmin of current power plant) + cost(pmin of current power plant)
+        The minimum of this value is found and that configuration is returned
+        :param power_plants_already_calc: Already prepared list of power plants from the calling function
+        :param powerplant_index_check_from: Already parsed through these power plants. So no need to check them again
+        :param sorted_power_plants: list of sorted power plants
+        :param remaining_load_to_distrib: remaining load to distribute
+        :param max_load: total-load requested
+        :return: dict of power plants which are going to be the most inexpensive in terms of euros
+        """
+        cost_dict_for_transition = {}
+        list_to_check = sorted_power_plants.copy()
+        for powerplant_index, power_plant in enumerate(list_to_check):
+            if powerplant_index_check_from <= powerplant_index:
+                if max_load > power_plant.min_power_when_on():
+                    if power_plant.min_power_when_on()>0:
+                        try:
+                            min_config_when_previous_plants_shutdown = self.get_optimal_power_plants_for_load( max_load - power_plant.min_power_when_on(), sorted_power_plants.copy())
+                            min_config_when_previous_plants_shutdown[power_plant] = power_plant.min_power_when_on()
+                            cost_dict_for_transition[power_plant] = min_config_when_previous_plants_shutdown
+                        except PowerPlantConfigurationError:
+                            continue
                     else:
-                        # Does it make sense to turn this on, but shutting down low cost power plants?
-                        load_array[load_index] = self.determine_cheapest_power_plant_at_transition(load_array,
-                                                                                                   load_index,
-                                                                                                   powerplant_index,
-                                                                                                   remaining_load_to_distribute)
-                        remaining_load_to_distribute = remaining_load_to_distribute - sum(load_array[load_index].values())
-            # print(
-            #     f"{self.calculate_cost_of_powerplant_dict(load_array[load_index]):.2f}, owest power at load_index {load_index} is with {(load_array[load_index])}")
-            if remaining_load_to_distribute > 1e-2:
-                logger.warning("Powerplants were not sufficient")
-            logging.debug(f"Lowest power at load_index {load_index} is with {load_array[load_index]}")
+                        power_plants_already_calc[power_plant] = remaining_load_to_distrib
+                        cost_dict_for_transition[power_plant] = power_plants_already_calc
 
-
-    def determine_cheapest_power_plant_at_transition(self, load_array, load_index, powerplant_index_start_from,
-                                                     pending_load):
-        local_dict_for_comparison = {}
-        for powerplant_index_current, power_plant in enumerate(self.power_plants):
-            if powerplant_index_current >= powerplant_index_start_from:
-                if load_index >= power_plant.min_power_when_on():
-                    if power_plant.min_power_when_on() <= load_index <= power_plant.max_power_when_on():
-                        local_dict_for_comparison[power_plant] = load_array[load_index - power_plant.min_power_when_on()]
-                        local_dict_for_comparison[power_plant][power_plant] = pending_load
-
-        if len(local_dict_for_comparison) == 0:
-            logger.warning(f"Demand for load of {pending_load} unable to be fulfilled.\n"
-                           f"Approximating to the earlier value at {pending_load-1}")
-            return load_array[load_index-1]
-        most_appropriate_power_plant = self.determine_lowest_cost_in_transition_dict(local_dict_for_comparison)
-        return local_dict_for_comparison[most_appropriate_power_plant]
+        lowest_cost_power_plant = self.determine_lowest_cost_in_transition_dict(cost_dict_for_transition)
+        return cost_dict_for_transition[lowest_cost_power_plant]
 
     def determine_lowest_cost_in_transition_dict(self, local_dict_per_power_plant):
+        """
+        Determines the dictionary key with lowest value
+        :param local_dict_per_power_plant: dictionary where key is power plant,
+        but value is the dict of powerplants with load as their key
+        :return: power plant with minimum cost of the dict
+        """
         cost_per_powerplant = {}
         for key, value in local_dict_per_power_plant.items():
             cost_per_powerplant[key] = self.calculate_cost_of_powerplant_dict(value)
@@ -98,6 +159,7 @@ class LoadCalculations:
 
     @staticmethod
     def calculate_cost_of_powerplant_dict(load_dict):
+        """Calculates the total cost of the running of the dictionary of the power plants"""
         total_cost = 0
         for powerplant, load_value in load_dict.items():
             total_cost = total_cost + powerplant.cost_euros_per_load(load_value)
@@ -115,4 +177,4 @@ if __name__ == "__main__":
         with open(example, "r") as fp:
             example_content = json.load(fp)
             # output_from_call = requests.post("http://127.0.0.1:5000/powerplant/", json=example_content)
-            load_distributor(example_content)
+            print(load_distributor(example_content))

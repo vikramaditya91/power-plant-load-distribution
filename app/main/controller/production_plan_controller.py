@@ -13,7 +13,7 @@ class PowerPlantResource(Resource):
     @use_args(PowerPlantLoadSchema, location="json")
     def post(self, input_args):
         distributed_load_raw = load_calculations.load_distributor(input_args)
-        # sanitized_load_distib = load_calculations.sanitize_load(distributed_load_raw)
+        sanitized_load_distib = load_calculations.sanitize_load(distributed_load_raw)
         return input_args
 
 

@@ -5,7 +5,6 @@ logger = logging.getLogger(__name__)
 
 
 class Config:
-    SECRET_KEY = os.getenv('PRIVATE_KEY', 'pri_key')
     DEBUG = True
 
 
@@ -26,5 +25,3 @@ config_by_name = dict(
     test=TestingConfig,
     production=ProductionConfig
 )
-
-key = Config.SECRET_KEY

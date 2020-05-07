@@ -1,6 +1,5 @@
 import logging
 import os
-from enum import Enum
 from os import path as op
 import werkzeug
 # https://github.com/noirbizarre/flask-restplus/issues/777
@@ -22,7 +21,6 @@ def init_logger(level=logging.DEBUG):
     logger.addHandler(logfile)
     return logger
 
-class PowerPlantTypeEnum(Enum):
-    gasfired = 0
-    turbojet = 1
-    windturbine = 2
+
+class PowerPlantConfigurationError(ValueError):
+    pass
