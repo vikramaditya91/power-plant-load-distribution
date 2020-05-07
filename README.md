@@ -1,10 +1,10 @@
 # Powerplant-load-requirement
 
-A web application that exposes a POST request method to cost-effectively distribute load on power plants.
+A REST API that exposes a POST request method to cost-effectively distribute load on power plants.
 
 ## Usage
 
-To run the web-application, ensure that you have [docker](https://docs.docker.com/get-docker/) installed
+To run the application, ensure that you have [docker](https://docs.docker.com/get-docker/) installed
 ```bash
 sudo docker build -t engie-test .
 sudo docker run -p 5001:5001 engie-test
