@@ -1,6 +1,7 @@
 from webargs import fields
 from marshmallow import Schema, validate
 
+
 class PowerPlantSchema(Schema):
     name = fields.Str(required=True)
     type = fields.Str(required=True, validate= lambda pptype: pptype in ["gasfired", "turbojet", "windturbine"])

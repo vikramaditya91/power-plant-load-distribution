@@ -130,3 +130,7 @@ class WindTurbine(PowerPlant):
 
     def cost_euros_per_load(self, load_on_powerplant):
         return 0
+
+
+class PowerPlantConfigurationError(ValueError):
+    pass

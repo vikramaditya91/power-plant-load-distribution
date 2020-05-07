@@ -1,7 +1,6 @@
 import logging
-from app.main.model.power_plant import PowerPlantFactory, PowerPlant
-from app.main.utils.general_utils import PowerPlantConfigurationError
-logger = logging.getLogger(__name__)
+from app.main.model.power_plant import PowerPlantFactory, PowerPlant, PowerPlantConfigurationError
+logger = logging.getLogger("service")
 
 
 def load_distributor(raw_input_data):
@@ -30,6 +29,7 @@ class LoadCalculationInterface:
         return cls(load_to_distribute, fuels, power_plant_instances)
 
     def __init__(self, load_to_distribute, fuel_list, power_plants):
+        logger.info("Setting up load calculation interface")
         self.load_to_distrib = load_to_distribute
         self.fuel_list = fuel_list
         self.power_plants = power_plants
@@ -164,17 +164,3 @@ class LoadCalculatorCore:
         for powerplant, load_value in load_dict.items():
             total_cost = total_cost + powerplant.cost_euros_per_load(load_value)
         return total_cost
-
-
-if __name__ == "__main__":
-    import pathlib
-    import json
-    import requests
-
-    path_to_example_dir = pathlib.Path(
-        "/home/vikramaditya/Applications/2020-Job-hunt/engie/powerplant-coding-challenge/" "example_payloads")
-    for example in path_to_example_dir.glob('*.json'):
-        with open(example, "r") as fp:
-            example_content = json.load(fp)
-            # output_from_call = requests.post("http://127.0.0.1:5000/powerplant/", json=example_content)
-            print(load_distributor(example_content))

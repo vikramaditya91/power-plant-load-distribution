@@ -3,7 +3,7 @@ import pathlib
 import unittest
 from parameterized import parameterized
 from app.main.service import load_calculations
-from app.main.utils.general_utils import PowerPlantConfigurationError
+from app.main.model.power_plant import PowerPlantConfigurationError
 
 
 class Testing(unittest.TestCase):
@@ -18,7 +18,7 @@ class Testing(unittest.TestCase):
             example_content = json.load(fp)
             output_received = load_calculations.load_distributor(example_content)
             self.assertEqual(expected_output, output_received)
-            # print(requests.post("http://0.0.0.0:5001/powerplant/", json=example_content).content)
+            import requests
 
     @parameterized.expand([
         ("payload1.json", 10000, PowerPlantConfigurationError),
